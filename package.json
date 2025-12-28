@@ -11,7 +11,9 @@
     "Jonathan Streetman",
     "Judah Sullivan"
   ],
-  "scripts": {},
+  "scripts": {
+    "dev": "bun ./playground/serve.ts"
+  },
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -20,5 +22,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "parse5": "^8.0.0"
   }
 }

@@ -1,0 +1,60 @@
+<html>
+  <head>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        console.log("Zenith running")
+
+        const btn = document.querySelector("button")
+        if (btn) {
+        btn.addEventListener("click", () => {
+            console.log("clicked")
+            })
+        }
+        })
+</script>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1 class="title">Welcome Zenith Users!</h1>
+      <button class="button">Click</button>
+    </div>
+
+    <style>
+      body { 
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      .container { 
+        background: purple;
+        width: 100vw;
+        height: 100vh;
+        display: flex; 
+        flex-direction: column; 
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .title { 
+        font-size: 120px;
+        font-weight: 900;
+        letter-spacing: 12px; 
+        line-height: 0.933; 
+        color: white;
+      }
+
+      .button { 
+        background: black;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px; 
+        border: none;
+        cursor: pointer;
+      }
+    </style>
+  </body>
+</html>
