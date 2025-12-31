@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+*.lock
+bun.lock
+coverage
+.venv
+__pycache__
+

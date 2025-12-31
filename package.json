@@ -12,13 +12,16 @@
     "Judah Sullivan"
   ],
   "scripts": {
-    "dev": "bun ./playground/serve.ts"
+    "dev": "bun ./playground/serve.ts",
+    "format": "prettier --write \"**/*.{zen,ts}\"",
+    "format:check": "prettier --check \"**/*.{zen,ts}\""
   },
   "module": "index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prettier": "^3.7.4"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -1,0 +1,124 @@
+name: Discord Issue Notifications
+
+on:
+  issues:
+    types: [opened, closed, reopened, edited, assigned, unassigned, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "❌ DISCORD_WEBHOOK_URL secret is not set"
+            exit 1
+          fi
+          
+          # Determine action and color
+          ACTION="${{ github.event.action }}"
+          case "$ACTION" in
+            opened)
+              COLOR="3066993"  # Green
+              EMOJI="📝"
+              TITLE="New Issue Created"
+              ;;
+            closed)
+              COLOR="15158332"  # Red
+              EMOJI="✅"
+              TITLE="Issue Closed"
+              ;;
+            reopened)
+              COLOR="15105570"  # Orange
+              EMOJI="🔄"
+              TITLE="Issue Reopened"
+              ;;
+            edited)
+              COLOR="3447003"  # Blue
+              EMOJI="✏️"
+              TITLE="Issue Edited"
+              ;;
+            assigned|unassigned)
+              COLOR="10181046"  # Purple
+              EMOJI="👤"
+              TITLE="Issue Assignment Changed"
+              ;;
+            labeled|unlabeled)
+              COLOR="15844367"  # Gold
+              EMOJI="🏷️"
+              TITLE="Issue Label Changed"
+              ;;
+            *)
+              COLOR="3447003"  # Blue
+              EMOJI="📋"
+              TITLE="Issue Updated"
+              ;;
+          esac
+          
+          # Use Node.js to properly build JSON payload with escaping
+          PAYLOAD=$(node <<EOF
+          const issue = ${{ toJSON(github.event.issue) }};
+          const repo = "${{ github.repository }}";
+          
+          // Format labels
+          const labels = issue.labels && issue.labels.length > 0
+            ? issue.labels.map(l => \`\`\${l.name}\`\`).join(' ')
+            : '*No labels*';
+          
+          // Truncate body
+          let body = issue.body || '*No description*';
+          if (body.length > 1000) {
+            body = body.substring(0, 1000) + '...';
+          }
+          
+          // Build embed
+          const embed = {
+            title: \`$EMOJI $TITLE\`,
+            description: \`**\${issue.title}**\`,
+            url: issue.html_url,
+            color: parseInt("$COLOR", 10),
+            fields: [
+              {
+                name: 'Issue #',
+                value: \`#\${issue.number}\`,
+                inline: true
+              },
+              {
+                name: 'State',
+                value: issue.state,
+                inline: true
+              },
+              {
+                name: 'Labels',
+                value: labels,
+                inline: false
+              },
+              {
+                name: 'Description',
+                value: body,
+                inline: false
+              }
+            ],
+            author: {
+              name: issue.user.login,
+              icon_url: issue.user.avatar_url
+            },
+            footer: {
+              text: repo
+            },
+            timestamp: new Date().toISOString()
+          };
+          
+          console.log(JSON.stringify({ embeds: [embed] }));
+          EOF
+          )
+          
+          # Send to Discord
+          curl -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
