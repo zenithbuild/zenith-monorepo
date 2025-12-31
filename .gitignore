@@ -36,3 +36,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Shell scripts (local setup scripts)
+*.sh
+scripts/*.sh
+
+# Local editor configs
+.vscode-icons/
+
+# Local tickets/issue tracking
+tickets/
