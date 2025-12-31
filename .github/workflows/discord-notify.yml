@@ -6,6 +6,11 @@ on:
   issue_comment:
     types: [created]
 
+# Security: Limit permissions to only what's needed
+permissions:
+  issues: write  # Needed to add labels to track notified issues
+  contents: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -14,13 +19,69 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          set -e  # Exit on error
+          set +x  # Don't echo commands (prevents secret exposure in logs)
+          
+          # Mask the webhook URL in logs to prevent accidental exposure
+          echo "::add-mask::$DISCORD_WEBHOOK_URL"
+          
+          # Validate secret is set
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
             echo "❌ DISCORD_WEBHOOK_URL secret is not set"
             exit 1
           fi
           
-          # Determine action and color
+          # Validate webhook URL format for security
+          if [[ ! "$DISCORD_WEBHOOK_URL" =~ ^https://discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$ ]]; then
+            echo "❌ Invalid Discord webhook URL format"
+            exit 1
+          fi
+          
+          # Get issue number and check if already notified
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          REPO="${{ github.repository }}"
+          TRACKING_LABEL="discord-notified"
           ACTION="${{ github.event.action }}"
+          
+          # Check if issue already has the tracking label (already notified)
+          HAS_LABEL=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels --jq ".labels[] | select(.name == \"$TRACKING_LABEL\") | .name" 2>/dev/null || echo "")
+          
+          # Prevent duplicates based on event type
+          case "$ACTION" in
+            opened)
+              # For new issues, skip if already notified
+              if [ -n "$HAS_LABEL" ]; then
+                echo "⏭️  Issue #$ISSUE_NUMBER already notified to Discord, skipping..."
+                exit 0
+              fi
+              ;;
+            edited)
+              # For edits: if not notified yet, treat as initial notification (for backfilling)
+              # If already notified, send update notification
+              if [ -z "$HAS_LABEL" ]; then
+                echo "ℹ️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, treating edit as initial notification..."
+                # Change action to "opened" for initial notification formatting
+                ACTION="opened"
+              fi
+              ;;
+            assigned|unassigned|labeled|unlabeled)
+              # For other updates, only send if issue was already notified (initial notification sent)
+              if [ -z "$HAS_LABEL" ]; then
+                echo "⏭️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, skipping update notification..."
+                exit 0
+              fi
+              ;;
+            closed|reopened)
+              # Always send for state changes (closed/reopened) - these are important
+              # But skip if issue was never initially notified
+              if [ -z "$HAS_LABEL" ]; then
+                echo "⏭️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, skipping state change notification..."
+                exit 0
+              fi
+              ;;
+          esac
+          
+          # Determine color, emoji, and title based on action (ACTION already set above)
           case "$ACTION" in
             opened)
               COLOR="3066993"  # Green
@@ -59,23 +120,20 @@ jobs:
               ;;
           esac
           
+          # Export variables for Node.js script
+          export EMOJI TITLE COLOR
+          
           # Use Node.js to properly build JSON payload with escaping
-<<<<<<< Updated upstream
           PAYLOAD=$(node <<EOF
-=======
-          # Write Node.js script to temp file (no quotes on heredoc to allow GitHub Actions expansion)
-          cat > /tmp/discord_payload.js <<JS_EOF
->>>>>>> Stashed changes
           const issue = ${{ toJSON(github.event.issue) }};
           const repo = "${{ github.repository }}";
+          const emoji = process.env.EMOJI || '📋';
+          const title = process.env.TITLE || 'Issue Updated';
+          const color = parseInt(process.env.COLOR || '3447003', 10);
           
-          // Format labels
+          // Format labels - use string concatenation to avoid template literal issues
           const labels = issue.labels && issue.labels.length > 0
-<<<<<<< Updated upstream
             ? issue.labels.map(l => \`\`\${l.name}\`\`).join(' ')
-=======
-            ? issue.labels.map(function(l) { return String.fromCharCode(96) + l.name + String.fromCharCode(96); }).join(' ')
->>>>>>> Stashed changes
             : '*No labels*';
           
           // Truncate body
@@ -86,14 +144,14 @@ jobs:
           
           // Build embed
           const embed = {
-            title: \`$EMOJI $TITLE\`,
-            description: \`**\${issue.title}**\`,
+            title: emoji + ' ' + title,
+            description: '**' + issue.title + '**',
             url: issue.html_url,
-            color: parseInt("$COLOR", 10),
+            color: color,
             fields: [
               {
                 name: 'Issue #',
-                value: \`#\${issue.number}\`,
+                value: '#' + issue.number,
                 inline: true
               },
               {
@@ -123,11 +181,52 @@ jobs:
           };
           
           console.log(JSON.stringify({ embeds: [embed] }));
-          EOF
-          )
+          JS_EOF
           
-          # Send to Discord
-          curl -X POST "$DISCORD_WEBHOOK_URL" \
+          # Run the Node.js script
+          PAYLOAD=$(node /tmp/discord_payload.js)
+          
+          # Send to Discord with error handling
+          HTTP_CODE=$(curl -s -o /tmp/discord_response.txt -w "%{http_code}" \
+            -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
+            -d "$PAYLOAD")
+          
+          # Check response
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Successfully sent notification to Discord"
+            
+            # Mark issue as notified by adding label (for "opened" events or initial "edited" notifications)
+            # This prevents duplicate initial notifications
+            if [ "$ACTION" = "opened" ] || [ -z "$HAS_LABEL" ]; then
+              # Check if label exists, create if not
+              LABEL_EXISTS=$(gh label list --repo "$REPO" --json name --jq ".[] | select(.name == \"$TRACKING_LABEL\") | .name" 2>/dev/null || echo "")
+              
+              if [ -z "$LABEL_EXISTS" ]; then
+                echo "Creating tracking label: $TRACKING_LABEL"
+                gh label create "$TRACKING_LABEL" \
+                  --repo "$REPO" \
+                  --color "0E8A16" \
+                  --description "Issue has been notified to Discord" \
+                  2>/dev/null || true
+              fi
+              
+              # Add label to issue to mark as notified
+              echo "Marking issue #$ISSUE_NUMBER as notified"
+              gh issue edit "$ISSUE_NUMBER" \
+                --repo "$REPO" \
+                --add-label "$TRACKING_LABEL" \
+                2>/dev/null || echo "⚠️  Could not add label (may already exist)"
+            fi
+          else
+            echo "❌ Failed to send notification (HTTP $HTTP_CODE)"
+            # Log error response without exposing webhook URL
+            if [ -f /tmp/discord_response.txt ]; then
+              echo "Response: $(cat /tmp/discord_response.txt)"
+            fi
+            exit 1
+          fi
+          
+          # Clean up
+          rm -f /tmp/discord_response.txt /tmp/discord_payload.js
 
