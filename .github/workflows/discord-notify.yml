@@ -64,10 +64,19 @@ jobs:
                 ACTION="opened"
               fi
               ;;
-            assigned|unassigned|labeled|unlabeled)
-              # For other updates, only send if issue was already notified (initial notification sent)
+            labeled|unlabeled)
+              # For label changes: if not notified yet, treat as initial notification (for backfilling)
+              # If already notified, send update notification
               if [ -z "$HAS_LABEL" ]; then
-                echo "⏭️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, skipping update notification..."
+                echo "ℹ️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, treating label change as initial notification..."
+                # Change action to "opened" for initial notification formatting
+                ACTION="opened"
+              fi
+              ;;
+            assigned|unassigned)
+              # For assignment changes, only send if issue was already notified (initial notification sent)
+              if [ -z "$HAS_LABEL" ]; then
+                echo "⏭️  Issue #$ISSUE_NUMBER hasn't been initially notified yet, skipping assignment notification..."
                 exit 0
               fi
               ;;
