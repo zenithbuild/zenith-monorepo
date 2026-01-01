@@ -15,26 +15,46 @@ export function generateBindingRuntime(
   const stateNames = Array.from(stateDeclarations.keys());
 
   // Generate binding update map - collect all nodes for each state
+  // Order is preserved: bindings are processed in the order they appear in stateBindings array
+  // (which matches DOM traversal order from compilation)
   const bindingMapEntries: string[] = [];
   const bindingMap = new Map<string, string[]>();
   
+  // Iterate over stateBindings array to preserve compile-time order
+  // Maps preserve insertion order, so this maintains deterministic ordering
   for (const stateBinding of stateBindings) {
     if (!bindingMap.has(stateBinding.stateName)) {
       bindingMap.set(stateBinding.stateName, []);
     }
     const selectors = bindingMap.get(stateBinding.stateName)!;
+    // Push bindings in the order they appear in stateBinding.bindings array
+    // This preserves the DOM traversal order from compilation
     for (const binding of stateBinding.bindings) {
       const bindId = `bind-${binding.nodeIndex}`;
       selectors.push(`span[data-zen-bind="${stateBinding.stateName}"][data-zen-bind-id="${bindId}"]`);
     }
   }
 
-  // Convert to code - use querySelector for each unique binding ID
+  // Generate update functions for each binding
+  // Each function captures a DOM node reference directly
+  // Map.entries() preserves insertion order, maintaining compile-time binding order
   for (const [stateName, selectors] of bindingMap.entries()) {
     if (selectors.length > 0) {
-      const nodeSelectors = selectors.map(s => `document.querySelector("${s.replace(/"/g, '\\"')}")`).join(", ");
+      // Generate an array of update functions, each capturing a node reference
+      const updateFunctions = selectors.map((selector, index) => {
+        const escapedSelector = selector.replace(/"/g, '\\"');
+        // Create a function that captures the node and updates it
+        // We'll query the node once during init, then the function captures it
+        return `(function() {
+        const node = document.querySelector("${escapedSelector}");
+        return function(value) {
+          if (node) node.textContent = String(value);
+        };
+      })()`;
+      }).join(",\n      ");
+      
       bindingMapEntries.push(
-        `    "${stateName}": [${nodeSelectors}]`
+        `    "${stateName}": [\n      ${updateFunctions}\n    ]`
       );
     }
   }
@@ -54,6 +74,7 @@ export function generateBindingRuntime(
       get: function() { return __zen_${name}; },
       set: function(value) {
         __zen_${name} = value;
+        // Immediately trigger synchronous updates - no batching, no async
         __zen_update_bindings("${name}", value);
       },
       enumerable: true,
@@ -73,12 +94,17 @@ export function generateBindingRuntime(
   let __zen_bindings = {};
 
   // Update function for a specific state
+  // Calls all registered update functions for the given state property
+  // Executes synchronously, immediately, in compile-order (array order)
+  // No batching, no async scheduling, no reordering
   function __zen_update_bindings(stateName, value) {
-    const nodes = __zen_bindings[stateName];
-    if (nodes) {
-      nodes.forEach(node => {
-        if (node) {
-          node.textContent = String(value);
+    const updaters = __zen_bindings[stateName];
+    if (updaters) {
+      // Execute update functions in deterministic order (compile-time order)
+      // forEach executes synchronously, preserving array order
+      updaters.forEach(updateFn => {
+        if (typeof updateFn === 'function') {
+          updateFn(value);
         }
       });
     }
