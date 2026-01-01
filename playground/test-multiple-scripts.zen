@@ -1,0 +1,18 @@
+<html>
+  <head>
+    <title>Test Multiple Scripts</title>
+  </head>
+  <body>
+    <div>Count: { count }</div>
+    <div>Name: { name }</div>
+    <script>
+      state count = 0;
+    </script>
+    <script>
+      state name = "test";
+      // This should cause a redeclaration error across scripts
+      state count = 1;
+    </script>
+  </body>
+</html>
+

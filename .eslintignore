@@ -1,13 +1,12 @@
-node_modules
-dist
-build
-*.lock
-bun.lock
-coverage
-.venv
-__pycache__
-
+# ESLint ignore file
 # .zen files are ignored temporarily until proper language support is added in Phase 3+
+
 # Ignore .zen files (custom Zenith syntax)
 **/*.zen
+
+# Standard ignores
+node_modules/
+dist/
+out/
+*.log
 

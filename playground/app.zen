@@ -20,6 +20,30 @@
       </div>
 
       <div class="test-section">
+        <h2>Compiler: State Declarations</h2>
+
+        <div class="test-group">
+          <h3>Multiple State Declarations</h3>
+          <div class="display-box">
+            <p>Count: { count }</p>
+            <p>Message: { message }</p>
+            <p>Score: { score }</p>
+          </div>
+          <button type="button" onclick="testStateDeclarations">Test State Declarations</button>
+          <span class="test-desc">Compiler registers state declarations at compile time</span>
+        </div>
+
+        <div class="test-group">
+          <h3>State Declaration Info</h3>
+          <div id="state-declaration-info" class="display-box">
+            <p><strong>Declared States:</strong></p>
+            <ul id="state-list"></ul>
+          </div>
+          <span class="test-desc">Shows all state variables registered by the compiler</span>
+        </div>
+      </div>
+
+      <div class="test-section">
         <h2>Event Handlers & DOM Helpers</h2>
 
         <div class="test-group">
@@ -224,6 +248,15 @@
       }
     </style>
 <script>
+      /* 
+       * Zenith Compiler: State Declarations
+       * 
+       * The 'state' keyword is custom Zenith syntax processed at compile time.
+       * Linter errors for 'state' are expected and can be safely ignored.
+       * The compiler removes these declarations from the output and generates
+       * proper runtime code. See compiler/parse.ts for implementation.
+       */
+      
       // Test logging helper
       function log(message) {
         const logEl = document.getElementById('test-log');
@@ -316,15 +349,50 @@
         count--;
       }
 
+      // Test: State declarations
+      function testStateDeclarations(event, el) {
+        log('✓ Testing state declarations...');
+        log(`  - count: ${count} (type: ${typeof count})`);
+        log(`  - message: "${message}" (type: ${typeof message})`);
+        log(`  - score: ${score} (type: ${typeof score})`);
+        log('✓ All state declarations are registered and accessible');
+        
+        // Update states to show reactivity
+        count++;
+        message = 'Updated at ' + new Date().toLocaleTimeString();
+        score += 10;
+        
+        log('✓ State values updated - text bindings should update automatically');
+      }
+
       // Initialize logging
       function initLog() {
         log('🚀 Phase 2 Event System & DOM Helpers Test Suite');
         log(
           'All DOM helper methods are ready: show(), hide(), addClass(), removeClass(), setText(), setHTML()'
         );
+        log('🚀 Compiler: State Declarations');
+        log('State declarations registered at compile time: count, message, score');
+        
+        // Display state declaration info
+        const stateList = document.getElementById('state-list');
+        if (stateList) {
+          const states = [
+            { name: 'count', value: count, type: typeof count },
+            { name: 'message', value: message, type: typeof message },
+            { name: 'score', value: score, type: typeof score }
+          ];
+          stateList.innerHTML = states.map(s => 
+            `<li><code>state ${s.name} = ${JSON.stringify(s.value)}</code> (${s.type})</li>`
+          ).join('');
+        }
       }
 
+      // State declarations - registered at compile time
+      // These are processed by the compiler and removed from the output
       state count = 0;
+      state message = "Hello from compiler!";
+      state score = 100;
     </script>
   </body>
 </html>

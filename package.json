@@ -13,8 +13,8 @@
   ],
   "scripts": {
     "dev": "bun ./playground/serve.ts",
-    "format": "prettier --write \"**/*.{zen,ts}\"",
-    "format:check": "prettier --check \"**/*.{zen,ts}\""
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\""
   },
   "module": "index.ts",
   "type": "module",

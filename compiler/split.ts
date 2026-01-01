@@ -1,6 +1,6 @@
 import type { ZenFile, StateBinding } from "./types"
 import * as parse5 from "parse5"
-import { extractStateDeclarations, transformStateDeclarations } from "./parse"
+import { extractStateDeclarations, extractStateDeclarationsWithLocation, transformStateDeclarations, type StateDeclarationInfo } from "./parse"
 
 // Transform on* attributes to data-zen-* attributes during compilation
 // Returns: { transformedHtml, eventTypes } where eventTypes is a Set of used event types
@@ -231,15 +231,55 @@ function stripScriptAndStyleTags(html: string): string {
   return html;
 }
 
+/**
+ * Compiler error for state redeclaration
+ */
+export class StateRedeclarationError extends Error {
+  constructor(
+    public stateName: string,
+    public firstDeclaration: StateDeclarationInfo,
+    public secondDeclaration: StateDeclarationInfo
+  ) {
+    const firstLoc = `script ${firstDeclaration.scriptIndex + 1}, line ${firstDeclaration.line}, column ${firstDeclaration.column}`;
+    const secondLoc = `script ${secondDeclaration.scriptIndex + 1}, line ${secondDeclaration.line}, column ${secondDeclaration.column}`;
+    super(
+      `Compiler Error: State variable "${stateName}" is declared multiple times.\n` +
+      `  First declaration: ${firstLoc}\n` +
+      `  Second declaration: ${secondLoc}\n` +
+      `  State variables must be declared exactly once.`
+    );
+    this.name = 'StateRedeclarationError';
+  }
+}
+
 // this function splits the props into what we are compiling the them down too 
 // html styles and scripts
 export function splitZen(file: ZenFile) {
-  // Extract state declarations from all scripts (name -> initial value)
-  const declaredStates = new Map<string, string>();
-  for (const script of file.scripts) {
-    const states = extractStateDeclarations(script.content);
-    states.forEach((value, name) => declaredStates.set(name, value));
+  // Extract state declarations from all scripts with location information
+  const allDeclarations: StateDeclarationInfo[] = [];
+  for (let i = 0; i < file.scripts.length; i++) {
+    const script = file.scripts[i];
+    if (script) {
+      const declarations = extractStateDeclarationsWithLocation(script.content, i);
+      allDeclarations.push(...declarations);
+    }
   }
+  
+  // Check for redeclarations and throw compile-time error
+  const declaredStates = new Map<string, StateDeclarationInfo>();
+  for (const declaration of allDeclarations) {
+    const existing = declaredStates.get(declaration.name);
+    if (existing) {
+      throw new StateRedeclarationError(declaration.name, existing, declaration);
+    }
+    declaredStates.set(declaration.name, declaration);
+  }
+  
+  // Convert to Map<string, string> for backward compatibility
+  const stateMap = new Map<string, string>();
+  declaredStates.forEach((info, name) => {
+    stateMap.set(name, info.value);
+  });
 
   // First transform event attributes
   const { transformedHtml: htmlAfterEvents, eventTypes } = transformEventAttributes(file.html);
@@ -250,7 +290,7 @@ export function splitZen(file: ZenFile) {
   // Then transform text bindings (this will validate against declared states)
   const { transformedHtml: htmlAfterBindings, stateBindings } = transformTextBindings(
     htmlAfterAttributeBindings,
-    new Set(declaredStates.keys())
+    new Set(stateMap.keys())
   );
 
   // Finally strip script/style tags
@@ -265,7 +305,7 @@ export function splitZen(file: ZenFile) {
     styles: file.styles.map(style => style.content),
     eventTypes: Array.from(eventTypes).sort(), // Return sorted array of event types
     stateBindings: Array.from(stateBindings.values()), // Return array of state bindings
-    stateDeclarations: declaredStates, // Return map of state declarations
+    stateDeclarations: stateMap, // Return map of state declarations (name -> value)
     bindings // Return attribute bindings for :class and :value
   }
 }

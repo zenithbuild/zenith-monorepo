@@ -45,8 +45,77 @@ export function parseZen(path: string): ZenFile {
 }
 
 /**
+ * State declaration with location information for error reporting
+ */
+export interface StateDeclarationInfo {
+  name: string;
+  value: string;
+  line: number;
+  column: number;
+  scriptIndex: number;
+}
+
+/**
+ * Extract state declarations from script content with location information
+ * Returns an array of StateDeclarationInfo for redeclaration detection
+ */
+export function extractStateDeclarationsWithLocation(
+  scriptContent: string,
+  scriptIndex: number
+): StateDeclarationInfo[] {
+  const declarations: StateDeclarationInfo[] = [];
+  const lines = scriptContent.split('\n');
+  
+  // Match "state identifier = ..." pattern (captures everything after = until end of statement)
+  // This regex matches: state <identifier> = <expression>
+  const stateRegex = /state\s+(\w+)\s*=\s*([^;]+?)(?:\s*;|\s*$)/gm;
+  let match;
+  
+  while ((match = stateRegex.exec(scriptContent)) !== null) {
+    const name = match[1];
+    const value = match[2];
+    
+    // Skip if match groups are missing (shouldn't happen with our regex, but TypeScript requires check)
+    if (!name || value === undefined) {
+      continue;
+    }
+    
+    const matchIndex = match.index ?? 0;
+    const trimmedValue = value.trim();
+    
+    // Calculate line and column from match index
+    let line = 1;
+    let column = 1;
+    let currentIndex = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const currentLine = lines[i];
+      if (!currentLine) continue;
+      const lineLength = currentLine.length + 1; // +1 for newline
+      if (currentIndex + lineLength > matchIndex) {
+        line = i + 1;
+        column = matchIndex - currentIndex + 1;
+        break;
+      }
+      currentIndex += lineLength;
+    }
+    
+    declarations.push({
+      name,
+      value: trimmedValue,
+      line,
+      column,
+      scriptIndex
+    });
+  }
+  
+  return declarations;
+}
+
+/**
  * Extract state declarations from script content
  * Returns a Map of state name -> initial value expression
+ * @deprecated Use extractStateDeclarationsWithLocation for redeclaration detection
  */
 export function extractStateDeclarations(scriptContent: string): Map<string, string> {
   const states = new Map<string, string>();
@@ -58,8 +127,14 @@ export function extractStateDeclarations(scriptContent: string): Map<string, str
   let match;
   while ((match = stateRegex.exec(scriptContent)) !== null) {
     const name = match[1];
-    const value = match[2].trim();
-    states.set(name, value);
+    const value = match[2];
+    
+    // Skip if match groups are missing (shouldn't happen with our regex, but TypeScript requires check)
+    if (!name || value === undefined) {
+      continue;
+    }
+    
+    states.set(name, value.trim());
   }
   return states;
 }
