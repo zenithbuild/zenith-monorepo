@@ -1,10 +1,16 @@
 import type { ZenFile, StateBinding } from "./types"
 import * as parse5 from "parse5"
 import { extractStateDeclarations, extractStateDeclarationsWithLocation, transformStateDeclarations, type StateDeclarationInfo } from "./parse"
+import { extractEventHandlers, detectStateMutations, validateStateMutations, type InlineHandlerInfo } from "./mutation"
 
 // Transform on* attributes to data-zen-* attributes during compilation
-// Returns: { transformedHtml, eventTypes } where eventTypes is a Set of used event types
-function transformEventAttributes(html: string): { transformedHtml: string; eventTypes: Set<string> } {
+// Also converts inline arrow functions to function names
+// Returns: { transformedHtml, eventTypes, inlineHandlerMap } 
+// where inlineHandlerMap maps original arrow function code to generated function names
+function transformEventAttributes(
+  html: string,
+  inlineHandlerMap: Map<string, string> // maps arrow function code -> generated function name
+): { transformedHtml: string; eventTypes: Set<string> } {
   const document = parse5.parse(html);
   const eventTypes = new Set<string>();
   
@@ -18,9 +24,26 @@ function transformEventAttributes(html: string): { transformedHtml: string; even
           // Convert onclick -> data-zen-click, onchange -> data-zen-change, etc.
           const eventType = attrName.slice(2); // Remove "on" prefix
           eventTypes.add(eventType); // Track which event types are used
+          
+          const handlerValue = attr.value;
+          // Check if it's an inline arrow function
+          const arrowFunctionMatch = handlerValue.match(/^\s*\([^)]*\)\s*=>\s*(.+)$/);
+          
+          if (arrowFunctionMatch) {
+            // It's an inline arrow function - look up the generated function name
+            const arrowBody = arrowFunctionMatch[1].trim();
+            const generatedName = inlineHandlerMap.get(arrowBody);
+            if (generatedName) {
+              return {
+                name: `data-zen-${eventType}`,
+                value: generatedName
+              };
+            }
+          }
+          
           return {
             name: `data-zen-${eventType}`,
-            value: attr.value
+            value: handlerValue
           };
         }
         return attr;
@@ -281,8 +304,53 @@ export function splitZen(file: ZenFile) {
     stateMap.set(name, info.value);
   });
 
-  // First transform event attributes
-  const { transformedHtml: htmlAfterEvents, eventTypes } = transformEventAttributes(file.html);
+  // Extract event handlers from HTML (including inline arrow functions)
+  const { eventHandlers, inlineHandlers } = extractEventHandlers(file.html);
+  
+  // Generate function code for inline handlers and create a map
+  // Map: arrow function body -> generated function name
+  const inlineHandlerMap = new Map<string, string>(); // arrow body -> function name
+  const inlineHandlerFunctions: string[] = []; // generated function code to inject
+  
+  inlineHandlers.forEach((handlerInfo, generatedName) => {
+    inlineHandlerMap.set(handlerInfo.body, generatedName);
+    
+    // Replace parameter references in the body (e.g., "e" -> "event")
+    let body = handlerInfo.body;
+    if (handlerInfo.paramName && handlerInfo.paramName !== 'event' && handlerInfo.paramName !== '') {
+      // Replace the parameter name with "event" in the body
+      // Use word boundaries to avoid partial matches
+      const paramRegex = new RegExp(`\\b${handlerInfo.paramName}\\b`, 'g');
+      body = body.replace(paramRegex, 'event');
+    }
+    
+    // Generate function code: function name(event, el) { body }
+    const functionCode = `function ${generatedName}(event, el) { ${body} }`;
+    inlineHandlerFunctions.push(functionCode);
+  });
+  
+  // Inject inline handler functions into scripts (before state declaration removal)
+  const scriptsWithInlineHandlers = file.scripts.map((script, index) => {
+    if (inlineHandlerFunctions.length > 0 && index === 0) {
+      // Inject inline handlers at the start of the first script
+      return {
+        ...script,
+        content: inlineHandlerFunctions.join('\n\n') + '\n\n' + script.content
+      };
+    }
+    return script;
+  });
+  
+  // Detect and validate state mutations
+  for (let i = 0; i < scriptsWithInlineHandlers.length; i++) {
+    const script = scriptsWithInlineHandlers[i];
+    if (!script) continue;
+    const mutations = detectStateMutations(script.content, new Set(stateMap.keys()));
+    validateStateMutations(mutations, eventHandlers, i);
+  }
+
+  // Transform event attributes (converting inline arrow functions to function names)
+  const { transformedHtml: htmlAfterEvents, eventTypes } = transformEventAttributes(file.html, inlineHandlerMap);
 
   // Then transform attribute bindings (:class, :value)
   const { transformedHtml: htmlAfterAttributeBindings, bindings } = transformAttributeBindings(htmlAfterEvents);
@@ -297,7 +365,11 @@ export function splitZen(file: ZenFile) {
   const finalHtml = stripScriptAndStyleTags(htmlAfterBindings);
 
   // Transform scripts to remove state declarations (runtime will handle them)
-  const transformedScripts = file.scripts.map(s => transformStateDeclarations(s.content));
+  // Use scriptsWithInlineHandlers instead of file.scripts to include injected inline handlers
+  const transformedScripts = scriptsWithInlineHandlers.map(s => {
+    if (!s) return '';
+    return transformStateDeclarations(s.content);
+  });
 
   return {
     html: finalHtml,

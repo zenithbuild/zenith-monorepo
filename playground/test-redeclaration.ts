@@ -39,7 +39,7 @@ try {
 // Test 3: Valid declarations (no redeclaration)
 console.log("\nTest 3: Valid declarations (should succeed)");
 try {
-  compile('playground/app.zen', 'playground/test-dist');
+  compile('playground/index.zen', 'playground/test-dist');
   console.log('✅ SUCCESS: Valid declarations compiled without errors');
 } catch (e: any) {
   if (e.name === 'StateRedeclarationError') {

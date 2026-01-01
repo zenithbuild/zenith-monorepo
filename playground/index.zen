@@ -20,6 +20,30 @@
       </div>
 
       <div class="test-section">
+        <h2>Phase 3: State Mutation (Inline Event Handlers)</h2>
+
+        <div class="test-group">
+          <h3>Inline Counter: { counter }</h3>
+          <button type="button" onclick="() => counter++">Increment Counter</button>
+          <button type="button" onclick="() => counter--">Decrement Counter</button>
+          <span class="test-desc">State mutation using inline arrow functions in event handlers</span>
+        </div>
+
+        <div class="test-group">
+          <h3>Text Input Binding</h3>
+          <input
+            type="text"
+            oninput="(e) => inputValue = e.target.value"
+            placeholder="Type to update state"
+          />
+          <div class="display-box">
+            Current value: "{ inputValue }"
+          </div>
+          <span class="test-desc">Text input updates state via inline event handler</span>
+        </div>
+      </div>
+
+      <div class="test-section">
         <h2>Compiler: State Declarations</h2>
 
         <div class="test-group">
@@ -393,6 +417,8 @@
       state count = 0;
       state message = "Hello from compiler!";
       state score = 100;
+      state counter = 0;
+      state inputValue = "";
     </script>
   </body>
 </html>
