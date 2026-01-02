@@ -1,45 +1,44 @@
 <script>
-  state clicks = 0
-
-  function decrement() {
-    clicks -= 1
-  }
-
-  function increment() {
-    clicks += 1
-  }
-
-  function handleClick(count) {
-    console.log('Clicked', count)
+  function parentCallback(clicks) {
+    console.log('Parent received clicks', clicks)
   }
 </script>
 
 <Main title="Home Page">
   <div>
-    <h1>Component Reactivity Test</h1>
+    <h1>Event Handling Test</h1>
     <h2>Welcome to Zenith Phase 3!</h2>
-    <p>Total clicks: { clicks }</p>
-    <p>This page demonstrates the component system with layouts and components.</p>
+    <p>This page demonstrates component event handling with internal events and parent callbacks.</p>
     
     <div style="margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
-      <h3>Validation UI</h3>
-      <p>Test component reactivity:</p>
+      <h3>Event Handling Validation UI</h3>
+      <p>Test component event handling:</p>
       
-      <div style="margin: 10px 0;">
-        <Button onClick={handleClick} />
+      <div style="margin: 15px 0;">
+        <h4>Button with Parent Callback</h4>
+        <p>This button updates its local count state and calls parentCallback(count):</p>
+        <Button onClick="parentCallback" />
+        <p style="font-size: 12px; color: #666;">Check console for "Parent received clicks" messages</p>
       </div>
       
-      <div style="margin: 10px 0;">
+      <div style="margin: 15px 0;">
+        <h4>Button with Internal Events Only</h4>
+        <p>This button uses onclick="handleClick" (internal component event):</p>
+        <Button />
+        <p style="font-size: 12px; color: #666;">No parent callback - updates only its own state</p>
+      </div>
+      
+      <div style="margin: 15px 0;">
+        <h4>Link Component</h4>
         <Link href="/about" label="About Page" />
       </div>
       
-      <div style="margin: 10px 0;">
+      <div style="margin: 15px 0;">
+        <h4>Multiple Independent Instances</h4>
+        <p>Each button maintains its own isolated state:</p>
         <Button />
-      </div>
-      
-      <div style="margin: 10px 0;">
-        <Button clicks={clicks} onClick={decrement} />
-        <Button clicks={clicks} onClick={increment} />
+        <Button />
+        <Button onClick="parentCallback" />
       </div>
     </div>
   </div>

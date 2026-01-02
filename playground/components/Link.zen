@@ -5,7 +5,7 @@ type Props = {
 }
 </script>
 
-<a :href="href">
+<a href="{href}">
   {label}
 </a>
 

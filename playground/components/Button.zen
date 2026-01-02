@@ -1,13 +1,14 @@
 <script>
 type Props = {
-  onClick?: () => void
-  clicks?: number
+  onClick?: (count: number) => void
 }
 
 state count = 0
 
 function handleClick() {
+  // Internal state mutation
   count += 1
+  // Call parent callback prop if provided
   if (onClick) {
     onClick(count)
   }
